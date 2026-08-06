@@ -1,0 +1,26 @@
+# Estado de UI do Obsidian — específico de cada máquina, causa conflito no sync
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/*/data.json
+
+# Lixeira do Obsidian
+.trash/
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporários
+*.tmp
+*.swp
+*~
+
+# Nada de segredo entra no vault
+.env
+*.key
+secrets.*
