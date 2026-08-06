@@ -1,0 +1,4 @@
+Mantém este diretório versionado mesmo vazio.
+Git não rastreia diretórios vazios, e ~/.hermes/memories é um symlink para cá —
+sem este arquivo, o symlink quebra em toda máquina assim que a memória fica vazia.
+Não remover.

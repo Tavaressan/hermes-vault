@@ -91,7 +91,9 @@ chmod +x "$HOME/vault-sync.sh"
 log "Cron a cada 10 minutos"
 CRON_LINE="*/10 * * * * $HOME/vault-sync.sh >> $HOME/.hermes/logs/vault-sync.log 2>&1"
 mkdir -p "$HERMES_HOME/logs"
-( crontab -l 2>/dev/null | grep -v 'vault-sync.sh' ; echo "$CRON_LINE" ) | crontab -
+# O '|| true' importa: sem crontab prévio, o grep sai com 1 e o pipefail abortaria o script
+existing="$(crontab -l 2>/dev/null | grep -v 'vault-sync.sh' || true)"
+{ [ -n "$existing" ] && printf '%s\n' "$existing"; printf '%s\n' "$CRON_LINE"; } | crontab -
 
 cat <<EOF
 
