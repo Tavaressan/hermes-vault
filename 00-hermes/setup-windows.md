@@ -1,5 +1,18 @@
 # Replicar o setup no Windows
 
+> ⚠️ **Leia isto antes de seguir.** Esta página descreve uma **segunda instalação
+> independente** do Hermes no Windows — um agente separado, com sua própria sessão.
+> A memória é compartilhada via Git, mas os dois agentes escrevem no mesmo arquivo e
+> podem gerar conflito.
+>
+> **Se o que você quer é acessar o mesmo agente a partir do Windows, não faça isto.**
+> Use o gateway: um único agente rodando no servidor ([[deploy-lightsail]]), acessado do
+> Windows por Telegram Desktop, WhatsApp Desktop ou navegador. Nada a instalar aqui —
+> o Obsidian sozinho, para ler o vault, basta.
+>
+> Esta página serve só para o caso de você querer um agente **local e offline** no
+> Windows, independente do servidor.
+
 Ordem importa: clone o vault antes de mexer no Hermes, porque os symlinks apontam para dentro dele.
 
 ## 1. Clonar o vault
