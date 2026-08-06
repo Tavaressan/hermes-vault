@@ -1,27 +1,24 @@
-# Exemplo de ~/.hermes/config.yaml — copie para a máquina nova e ajuste.
-# O arquivo real NÃO é versionado: contém caminhos de máquina e pode conter segredos.
-# Segredos vão em ~/.hermes/.env, nunca aqui.
+# Exemplo de ~/.hermes/config.yaml.
+# O arquivo real NÃO é versionado. Segredos vão em ~/.hermes/.env, nunca aqui.
+#
+# Depois de copiar, rode `hermes doctor --fix` para migrar o esquema
+# (sem isso o doctor acusa "Config version outdated (v0 → v33)").
 
 model:
-  # Modelo criado localmente a partir de granite4:7b-a1b-h com num_ctx e num_thread fixados.
-  # Ver 20-estudos/ollama-tuning-imac-2015 para o Modelfile e os números de benchmark.
-  default: "granite4-agent"
-  provider: "custom"
-  base_url: "http://localhost:11434/v1"
+  # Assinatura Claude Pro. Requer CLAUDE_CODE_OAUTH_TOKEN em ~/.hermes/.env,
+  # gerado no desktop com: claude setup-token
+  default: claude-opus-5
+  provider: anthropic
 
-# Acionado quando o modelo local falha ou não dá conta da tarefa.
-# Limites do free tier da OpenRouter (verificado em 2026-08-06): 20 req/min,
-# 50 req/dia sem créditos, 1000 req/dia após compra única de US$ 10.
-fallback_providers:
-  - provider: openrouter
-    model: nvidia/nemotron-3-ultra-550b-a55b:free
-  - provider: openrouter
-    model: openai/gpt-oss-20b:free
-  # Só compensa depois da compra única de US$ 10, que eleva o teto para 1000 req/dia:
-  # - provider: openrouter
-  #   model: anthropic/claude-sonnet-4
+# Failover automático em 429, 529, 503 ou falha de conexão.
+# Descomente se houver OPENROUTER_API_KEY no .env.
+# fallback_providers:
+#   - provider: openrouter
+#     model: anthropic/claude-opus-4.6
+
+# NÃO adicione um fallback para Ollama numa instância em nuvem: não há Ollama lá.
+# E mesmo no iMac ele é inútil — 1,90 tok/s, ver 20-estudos/ollama-tuning-imac-2015.
 
 memory:
-  # Caminho não é configurável: o Hermes usa sempre $HERMES_HOME/memories/.
-  # A integração com o vault é feita por symlink — ver setup-windows.md.
-  enabled: true
+  memory_enabled: true
+  user_profile_enabled: true
