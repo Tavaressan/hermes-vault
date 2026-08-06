@@ -1,12 +1,41 @@
 ---
 tags: [infra, aws, lightsail, deploy, hermes]
-status: pronto-para-executar
+status: provisionado
 ---
 
-# Migrar o agente para o Amazon Lightsail
+# O agente no Amazon Lightsail
 
-Runbook para tirar o gateway do iMac e colocá-lo numa instância sempre ligada, mantendo
-a memória sincronizada com este vault.
+Registro do que foi provisionado e do que falta. A instância **já existe**.
+
+## Estado atual
+
+| item | valor |
+|---|---|
+| Instância | `hermes-agent`, região `sa-east-1a` |
+| Bundle | `micro_3_1` — **US$ 7,00/mês**, 1 GB RAM, 2 vCPU, 40 GB SSD, 2 TB transferência |
+| SO | Ubuntu 24.04.4 LTS, **x86_64** |
+| IP | 54.233.15.35 (+ IPv6) |
+| Firewall | **só TCP/22, só a partir do IP do iMac**. Porta 80 removida, IPv6 de entrada removido |
+| Swap | 2 GB — 911 MB de RAM não sobrevivem ao `pip install` sem ele |
+| Chave SSH | `~/.ssh/lightsail-hermes.pem` no iMac |
+| Vault | clonado em `~/hermes-vault`, deploy key com escrita registrada |
+| Sync | cron a cada 10 min, testado com push e pull reais |
+| Hermes | v0.20.0 instalado, symlinks de `memories/` e `SOUL.md` ativos |
+
+**Falta apenas**: gravar os segredos (passo 3), copiar a config (passo 4) e subir o
+gateway (passo 5).
+
+⚠️ **O firewall está preso ao IP do iMac** (187.10.236.26/32 no momento do provisionamento).
+Se sua internet trocar de IP, o SSH para de funcionar. Para reabrir:
+```bash
+aws lightsail put-instance-public-ports --region sa-east-1 --instance-name hermes-agent \
+  --port-infos "fromPort=22,toPort=22,protocol=TCP,cidrs=$(curl -s https://checkip.amazonaws.com)/32"
+```
+Ou use o SSH pelo navegador no console do Lightsail, que não depende disso.
+
+---
+
+## Por que este desenho
 
 **Motivo principal:** o iMac roda macOS 12.7.6 — a última atualização do Monterey, de
 29/07/2024. O suporte da Apple terminou por volta de novembro de 2024, então a máquina
@@ -35,55 +64,51 @@ API dentro é o risco que esta migração resolve.
 manuais; o agente escreve apenas na instância. Isso evita conflito de merge em
 `MEMORY.md`, que dois agentes ativos produziriam.
 
-## Pré-requisito bloqueante
+## Pré-requisitos — já cumpridos
 
-**O vault ainda não tem remoto.** Toda a sincronização depende disso. Antes de qualquer
-coisa na AWS:
+- Repositório privado: **github.com/Tavaressan/hermes-vault** (criado, `main`)
+- PAT exposto no `~/.claude.json`: removido pelo usuário (estavam expirados)
 
-1. Criar repositório **privado** no GitHub (a memória contém informação pessoal)
-2. No iMac:
-   ```bash
-   cd ~/Obsidian/hermes-vault
-   git remote add origin git@github.com:<usuario>/hermes-vault.git
-   git push -u origin main
-   ```
+## Passo 1 e 2 — instância e provisionamento (feitos)
 
-⚠️ **Antes disso, revogue o PAT exposto.** O `~/.claude.json` guarda um token do GitHub em
-texto plano no MCP do projeto Alfabra-Vector. Com uma máquina em nuvem
-entrando na conta, o risco deixa de ser teórico:
-https://github.com/settings/tokens
-
-## Passo 1 — Criar a instância
-
-Console do Lightsail → Create instance:
-
-| Campo | Valor |
-|---|---|
-| Região | `us-east-1` (mais barata) ou `sa-east-1` (menor latência do Brasil) |
-| Plataforma | Linux/Unix |
-| Blueprint | **Ubuntu 24.04 LTS** |
-| Arquitetura | **ARM** — mais barata, e o instalador do Hermes suporta `aarch64` (verificado) |
-| Plano | **2 GB de RAM** — 1 GB fica apertado com Python + a ponte Node do WhatsApp |
-| Rede | **IPv6-only**, se disponível — mais barato e sem superfície IPv4 |
-
-Sobre IPv6-only: o Telegram em polling e o WhatsApp Baileys são *outbound-only* — o
-gateway disca para fora, nada escuta. Só a Cloud API oficial da Meta exigiria IP público.
-Se o acesso administrativo ficar difícil sem IPv4, use o **SSH pelo navegador** do próprio
-console do Lightsail.
-
-> ⚠️ Confirme o preço do plano no console. Os valores que vi (US$ 3,50 IPv6-only,
-> US$ 5 com IPv4) vêm de fontes secundárias, não do console.
-
-## Passo 2 — Provisionar
-
-Copie `provision-lightsail.sh` (nesta mesma pasta do vault) para a instância e execute.
-Ele instala dependências, o Hermes, clona o vault e cria os symlinks. É idempotente:
-rodar duas vezes não quebra nada.
+Reproduzível por CLI, caso precise recriar:
 
 ```bash
-scp provision-lightsail.sh ubuntu@<host>:~
-ssh ubuntu@<host> 'bash ~/provision-lightsail.sh <URL-do-repo-do-vault>'
+aws lightsail create-instances --region sa-east-1 \
+  --instance-names hermes-agent --availability-zone sa-east-1a \
+  --blueprint-id ubuntu_24_04 --bundle-id micro_3_1
+
+# Fecha tudo, deixa só SSH do seu IP
+aws lightsail put-instance-public-ports --region sa-east-1 --instance-name hermes-agent \
+  --port-infos "fromPort=22,toPort=22,protocol=TCP,cidrs=$(curl -s https://checkip.amazonaws.com)/32"
+
+# Chave SSH (nunca imprima o conteúdo)
+aws lightsail download-default-key-pair --region sa-east-1 \
+  --query privateKeyBase64 --output text > ~/.ssh/lightsail-hermes.pem
+chmod 600 ~/.ssh/lightsail-hermes.pem
 ```
+
+Depois: gerar `~/.ssh/id_ed25519` na instância, registrar a pública como **deploy key com
+escrita** no repositório, e rodar `provision-lightsail.sh <url-ssh-do-repo>`.
+
+### Erros que este provisionamento revelou
+
+Ficam registrados porque custaram tempo e não são óbvios:
+
+1. **IPv6-only não funciona para este caso.** `github.com` e
+   `hermes-agent.nousresearch.com` não publicam registro AAAA, e o Lightsail **não tem
+   NAT64/DNS64 nativo** — obter isso exigiria peering com VPC do EC2 rodando NAT gateway,
+   que custa mais que a instância. Numa instância IPv6-only o instalador do Hermes nem
+   baixa e o `git push` falha.
+   > — [AWS re:Post](https://repost.aws/questions/QUFaBCYpKeSaqxCdy22wTJfA/ipv6-only-instance-in-lightsail-with-nat64), acesso em 2026-08-06.
+2. **1 GB de RAM precisa de swap.** Sem os 2 GB de swap, o `pip install` do Hermes corre
+   risco de OOM. O script já cria.
+3. **Git não versiona diretório vazio.** `00-hermes/memories/` some no pull quando fica
+   vazio, e o symlink `~/.hermes/memories` quebra em toda máquina. Resolvido com um
+   `.gitkeep` — **não remova esse arquivo**.
+4. **Bug de `pipefail` no script**: `crontab -l | grep -v` sai com 1 quando não há crontab,
+   e com `set -euo pipefail` isso abortava o provisionamento em silêncio no último passo.
+   Corrigido com `|| true`.
 
 ## Passo 3 — Segredos (você faz, por SSH)
 
@@ -139,17 +164,26 @@ O cron instalado pelo script faz commit e push do vault a cada 10 minutos. Nos c
 Se ocorrer conflito em `MEMORY.md`: o arquivo usa `§` como separador de entradas, então a
 resolução quase sempre é manter os dois lados e apagar os marcadores de conflito.
 
-## Custo esperado
+## Custo
 
-| item | USD/mês |
-|---|---|
-| Lightsail 2 GB ARM | ~5–7 |
-| Transferência | incluída no plano |
-| **Total** | **~5–7** |
+Preços lidos da API do Lightsail em 2026-08-06. `sa-east-1` custa o mesmo que
+`us-east-1`; muda só o sufixo do bundle (`_3_1` vs `_3_0`).
 
-Para comparação, medido na API pública de preços da AWS (us-east-1, on-demand): EC2
-`t4g.small` custa US$ 0,0168/h → **US$ 12,26/mês** só de instância, mais disco e IPv4.
-Lightsail é mais barato e mais simples para esta carga.
+| bundle | RAM | SSD | transf. | **USD/mês** |
+|---|---|---|---|---|
+| `nano_3_1` | 0,5 GB | 20 GB | 1 TB | 5,00 |
+| **`micro_3_1`** ← em uso | 1 GB | 40 GB | 2 TB | **7,00** |
+| `small_3_1` | 2 GB | 60 GB | 3 TB | 12,00 |
+| `medium_3_1` | 4 GB | 80 GB | 4 TB | 24,00 |
+
+Os planos `*_ipv6_*` custam US$ 2 a menos, mas **não servem** — ver o erro nº 1 acima.
+
+Para comparação, da API de preços do EC2 (us-east-1, on-demand): `t4g.small` a
+US$ 0,0168/h → US$ 12,26/mês só de instância, mais disco e IPv4. Lightsail sai mais
+barato e com menos peça móvel nesta carga.
+
+**Se a RAM apertar** (Telegram + WhatsApp + Playwright juntos), o caminho é snapshot →
+criar `small_3_1` a partir dele → trocar o IP. Não há resize in-place.
 
 ## Manutenção
 
