@@ -49,7 +49,7 @@ coisa na AWS:
    ```
 
 ⚠️ **Antes disso, revogue o PAT exposto.** O `~/.claude.json` guarda um token do GitHub em
-texto plano no MCP do projeto Alfabra-Vector (`ghp_atE...`). Com uma máquina em nuvem
+texto plano no MCP do projeto Alfabra-Vector. Com uma máquina em nuvem
 entrando na conta, o risco deixa de ser teórico:
 https://github.com/settings/tokens
 
